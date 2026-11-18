@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Square Schedule – Focus View
 // @namespace    vince.square.schedule
-// @version      2.2.3
+// @version      2.2.4
 // @description  Week + Day view: hide days, collapse sidebar, fit staff on screen, hide labor $, readability, color themes with custom picker, time-first shift labels, quiet "+" slots, time-entry fix.
 // @match        https://app.squareup.com/dashboard/*
 // @run-at       document-idle
@@ -109,8 +109,12 @@ html.tm-sq-on .schedule-table tfoot time { font-weight:700; font-size:14px; font
 
 /* Time-first shift labels: times big and bold, job name smaller after them */
 html.tm-sq-on .schedule-table .schedule-cell-button--existing { display:flex !important; flex-wrap:wrap; align-content:center; align-items:baseline; column-gap:.3em; text-align:left; }
-html.tm-sq-on .schedule-table .schedule-cell-button--existing > time { order:0; font-weight:700 !important; font-size:13px !important; font-variant-numeric:tabular-nums; white-space:nowrap; }
-html.tm-sq-on .schedule-table .schedule-cell-button--existing > .schedule-cell-button__title { order:2; flex-basis:100%; font-size:11px !important; opacity:.85; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+html.tm-sq-on .schedule-table .schedule-cell-button--existing > time { order:0; font-weight:700 !important; font-size:var(--tm-tfs,13px) !important; font-variant-numeric:tabular-nums; white-space:nowrap; }
+html.tm-sq-on .schedule-table .schedule-cell-button--existing > .schedule-cell-button__title { order:2; flex-basis:100%; font-size:min(11px, var(--tm-tfs,11px)) !important; opacity:.85; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+/* Shrink the time with the cell (narrow columns when the menu is open) so "10:30 am – 7:30 pm" stays on one line.
+   cqi = 1% of the button's content width; the factor is ~100 / (time width in em), a little slack for wider fonts. */
+html.tm-sq-on .schedule-table .schedule-cell-button--existing { container-type:inline-size; --tm-tfs:clamp(9px, 10.5cqi, 13px); }
+html.tm-sq-on.tm-read .schedule-table .schedule-cell-button--existing { --tm-tfs:clamp(9px, 9.6cqi, 13px); }
 html.tm-sq-on .schedule-table .schedule-cell-button--existing > .schedule-cell-button__title strong { font-weight:500 !important; }
 html.tm-sq-on .timeline-schedule-cell-button__shift__label { display:flex !important; flex-direction:column; }
 html.tm-sq-on .timeline-schedule-cell-button__shift__label [data-test-shift-info-time] { order:-1; }
