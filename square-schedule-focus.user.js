@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Square Schedule – Focus View
 // @namespace    vince.square.schedule
-// @version      2.2.4
+// @version      2.3.0
 // @description  Week + Day view: hide days, collapse sidebar, fit staff on screen, hide labor $, readability, color themes with custom picker, time-first shift labels, quiet "+" slots, time-entry fix.
 // @match        https://app.squareup.com/dashboard/*
 // @run-at       document-idle
@@ -36,7 +36,7 @@
     ['publish', 'Publish button'], ['controls', 'Filter-bar controls'], ['today', 'Today highlight'], ['warn', 'Warning icons'], ['unpub', 'Unpublished outline']];
 
   const SHAPES = { fill: 'Fill', outline: 'Outline', mix: 'Mix' };
-  const DEFAULTS = { hidden: [], nav: false, fit: true, read: true, theme: 'dark', custom: Object.assign({}, PRESETS.dark), squareShift: true, shape: 'fill', fillPct: 30 };
+  const DEFAULTS = { hidden: [], nav: false, fit: true, read: true, theme: 'dark', custom: Object.assign({}, PRESETS.dark), squareShift: true, shape: 'fill', fillPct: 30, site: true };
   const load = () => {
     try {
       const s = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}'));
@@ -322,6 +322,19 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     for (const k in vars) if (html.style.getPropertyValue(k) !== vars[k]) html.style.setProperty(k, vars[k]);
   }
 
+  // ---- Dark site: every other Dashboard page gets a generic invert (look only, nothing is written) ----
+  const SITE_CSS = `
+html.tm-site { background:#fff; filter:invert(.92) hue-rotate(180deg); }
+html.tm-site :is(img, video, canvas, picture, iframe, [style*="background-image"]) { filter:invert(1) hue-rotate(180deg); }
+html.tm-site :is(img, video, canvas, picture, [style*="background-image"]) :is(img, video, canvas) { filter:none; }`;
+  function applySite() {
+    const html = document.documentElement;
+    const c = themeColors();
+    const want = !!(S.site && c && luminance(c.bg) < 0.4 && !onPage());
+    if (want) setText(styleEl('tm-sq-site'), SITE_CSS);
+    html.classList.toggle('tm-site', want);
+  }
+
   // ---- Sidebar (lives in an open shadow root on #messenger-host) ----------
   // The page MutationObserver can't see inside this shadow root, and the header renders
   // (and may re-render, dropping foreign nodes) after we run. So watch the root itself and
@@ -456,7 +469,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
   let pickFrame = 0;
   function refreshPanel() {
     const p = buildPanel();
-    const sig = S.theme + '|' + JSON.stringify(S.custom) + '|' + S.squareShift + '|' + S.shape;
+    const sig = S.theme + '|' + JSON.stringify(S.custom) + '|' + S.squareShift + '|' + S.shape + '|' + S.site;
     if (p.dataset.sig === sig) return;
     p.dataset.sig = sig;
     p.textContent = '';
@@ -532,6 +545,14 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     cb.addEventListener('change', () => { S.squareShift = cb.checked; save(); applyTheme(); refreshPanel(); });
     cl.appendChild(cb);
     p.appendChild(cl);
+
+    const sl = document.createElement('label');
+    sl.textContent = 'Dark theme on all other Dashboard pages';
+    const sb = document.createElement('input');
+    sb.type = 'checkbox'; sb.checked = S.site;
+    sb.addEventListener('change', () => { S.site = sb.checked; save(); applySite(); refreshPanel(); });
+    sl.appendChild(sb);
+    p.appendChild(sl);
 
     const done = document.createElement('button');
     done.type = 'button'; done.textContent = 'Done'; done.className = 'on';
@@ -627,6 +648,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
       const timeline = document.querySelector('.timeline-table__wrapper');
       const on = onPage() && !!(table || timeline);
       html.classList.toggle('tm-sq-on', on);
+      applySite();
       html.classList.toggle('tm-week', on && !!table);
       html.classList.toggle('tm-day', on && !table && !!timeline);
       applyTheme();
