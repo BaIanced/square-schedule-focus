@@ -13,11 +13,13 @@ A button bar at the bottom right of the schedule:
 - **Menu**: show or hide Square's sidebar.
 - **Fit** (Week view): shrinks rows so every team member fits on screen.
 - **Read**: Atkinson Hyperlegible font, extra letter spacing, row stripes and a highlight on the row under your mouse.
-- **Colors**: themes (Square, Dark, Dim, Midnight, Warm, Contrast, Custom), six color pickers, shift style (Fill, Outline or Mix with a fill-opacity slider), and an option to use one color for all shifts instead of Square's job colors.
+- **Colors**: themes (Square, Dark, Dim, Midnight, Warm, Contrast, Custom), color pickers (page, cells, text, lines, accent, shifts, Publish button, filter controls, today highlight, warning icons, unpublished outline), shift style (Fill, Outline or Mix with a fill-opacity slider), and an option to use one color for all shifts instead of Square's job colors.
 
 It also:
 - shows shift **times first and bold**, with the job name smaller after them;
 - hides labor cost (set `SHOW_COST = true` at the top of the script to show it);
+- on dark themes, darkens Square's sidebar, pop-ups and the add/edit shift sheet, and highlights today's column in Week view;
+- keeps grid lines evenly sharp at any display scaling or browser zoom;
 - hides the grid of "+" icons on empty slots; only the slot under your mouse shows one;
 - fixes Square's shift editor time box, where typing a time like 5:30 can drop digits.
 

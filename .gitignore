@@ -4,3 +4,4 @@ snapshots/
 private/
 *.png
 __pycache__/
+HANDOFF.md

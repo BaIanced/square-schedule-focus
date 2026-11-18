@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Square Schedule – Focus View
 // @namespace    vince.square.schedule
-// @version      2.1.1
+// @version      2.2.3
 // @description  Week + Day view: hide days, collapse sidebar, fit staff on screen, hide labor $, readability, color themes with custom picker, time-first shift labels, quiet "+" slots, time-entry fix.
 // @match        https://app.squareup.com/dashboard/*
 // @run-at       document-idle
@@ -32,7 +32,8 @@
     contrast: { bg: '#000000', surface: '#0a0a0a', text: '#ffffff', grid: '#5a5a5a', accent: '#ffd400', shift: '#0091ea' },
   };
   const PRESET_NAMES = { off: 'Square', dark: 'Dark', dim: 'Dim', midnight: 'Midnight', warm: 'Warm', contrast: 'Contrast', custom: 'Custom' };
-  const COLOR_FIELDS = [['bg', 'Background'], ['surface', 'Headers / cells'], ['text', 'Text'], ['grid', 'Grid lines'], ['accent', 'Accent'], ['shift', 'Shift blocks']];
+  const COLOR_FIELDS = [['bg', 'Background'], ['surface', 'Headers / cells'], ['text', 'Text'], ['grid', 'Grid lines'], ['accent', 'Accent'], ['shift', 'Shift blocks'],
+    ['publish', 'Publish button'], ['controls', 'Filter-bar controls'], ['today', 'Today highlight'], ['warn', 'Warning icons'], ['unpub', 'Unpublished outline']];
 
   const SHAPES = { fill: 'Fill', outline: 'Outline', mix: 'Mix' };
   const DEFAULTS = { hidden: [], nav: false, fit: true, read: true, theme: 'dark', custom: Object.assign({}, PRESETS.dark), squareShift: true, shape: 'fill', fillPct: 30 };
@@ -57,7 +58,9 @@
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   }
   const readableOn = hex => (luminance(hex) > 0.4 ? '#111111' : '#ffffff');
-  const themeColors = () => (S.theme === 'custom' ? S.custom : PRESETS[S.theme]) || null;
+  // Fields added in v2.2 fall back to existing ones, so presets and older saved Custom themes need no migration
+  const fullColors = c => c && Object.assign({ publish: c.accent, controls: c.surface, today: c.accent, warn: '#f5b942', unpub: c.text }, c);
+  const themeColors = () => fullColors((S.theme === 'custom' ? S.custom : PRESETS[S.theme]) || null);
 
   // ---- Readable font (Square's CSP allows fonts.googleapis.com) -----------
   function ensureFont() {
@@ -92,6 +95,8 @@ html.tm-sq-on.tm-nav-off .ecosystem-header-fixed-left-nav-spacer { width:0 !impo
 
 /* Week name cell: hours moved to the right of the name */
 html.tm-sq-on .schedule-table thead th:first-child { width:var(--tm-namecol,230px) !important; }
+html.tm-sq-on .schedule-table thead th:not(:first-child) { width:var(--tm-daycol,auto) !important; }
+html.tm-sq-on .schedule-table table { table-layout:fixed; width:var(--tm-tablew,100%) !important; }
 html.tm-sq-on .schedule-table tbody th.schedule-table__row__cell--header { position:relative; padding:4px 80px 4px 8px !important; vertical-align:middle; }
 html.tm-sq-on .schedule-table tbody .schedule-table__row__cell--header__title,
 html.tm-sq-on .schedule-table tbody .timecards__text-and-icon__text { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-width:0; }
@@ -163,7 +168,7 @@ html.tm-sq-on.tm-read .timeline-table__wrapper tbody tr.tm-hover-row > * { backg
 #tm-sq-bar .sep { width:1px; background:#3a3f47; margin:2px 3px; }
 #tm-sq-theme { position:fixed; right:10px; z-index:2147483001; width:300px; display:none; flex-direction:column; gap:10px;
   background:#1b1d21; color:#e6e6e6; border:1px solid #3a3f47; border-radius:10px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,.6);
-  font:500 14px/1.3 Arial, sans-serif; }
+  font:500 14px/1.3 Arial, sans-serif; max-height:calc(100vh - 80px); overflow-y:auto; box-sizing:border-box; }
 #tm-sq-theme.open { display:flex; }
 #tm-sq-theme .tm-presets { display:flex; flex-wrap:wrap; gap:4px; }
 #tm-sq-theme label { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
@@ -173,6 +178,8 @@ html.tm-sq-on.tm-read .timeline-table__wrapper tbody tr.tm-hover-row > * { backg
 html:not(.tm-sq-on) #tm-sq-bar, html:not(.tm-sq-on) #tm-sq-theme { display:none !important; }
 `;
 
+  // Square pop-ups that stay light on dark themes (Ember classes plus Market web components)
+  const POPUPS = '.popover, .dialog--modal, .modal, .modal-dialog, .sheet, .blade, market-modal-full, market-modal-partial, market-dialog, market-blade, market-sheet, market-popover, [role="dialog"]:not(#tm-sq-theme)';
   // ---- Theme CSS (uses --tm-* variables set on <html>) ----------------------
   const THEME_CSS = `
 html.tm-sq-on.tm-theme, html.tm-sq-on.tm-theme body,
@@ -203,6 +210,9 @@ html.tm-sq-on.tm-theme .timeline-table__wrapper thead th,
 html.tm-sq-on.tm-theme .timeline-table__column--left,
 html.tm-sq-on.tm-theme .timeline-table__footer,
 html.tm-sq-on.tm-theme .timeline-table__footer td { background-color:var(--tm-surface) !important; }
+html.tm-sq-on.tm-theme .timeline-table__wrapper thead,
+html.tm-sq-on.tm-theme .timeline-table__hour-cell { background-color:var(--tm-surface) !important; }
+html.tm-sq-on.tm-theme .timeline-table__hour-cell:not(:first-child):not(:last-child) { background-color:transparent !important; }
 html.tm-sq-on.tm-theme .timeline-table__hour-cell,
 html.tm-sq-on.tm-theme .timeline-table__row,
 html.tm-sq-on.tm-theme .timeline-table__column { border-color:var(--tm-grid) !important; }
@@ -212,17 +222,24 @@ html.tm-sq-on.tm-theme .timeline-table__wrapper [class*="summary"] { color:var(-
 /* Filter bar controls */
 html.tm-sq-on.tm-theme .filter-bar .button,
 html.tm-sq-on.tm-theme .filter-bar .dropdown__trigger,
-html.tm-sq-on.tm-theme .filter-bar .segmented-control__segment { background-color:var(--tm-surface) !important; color:var(--tm-text) !important; border-color:var(--tm-grid) !important; }
-html.tm-sq-on.tm-theme .filter-bar .button--primary { background-color:var(--tm-accent) !important; color:var(--tm-accent-text) !important; }
-html.tm-sq-on.tm-theme .filter-bar svg { color:var(--tm-text) !important; }
+html.tm-sq-on.tm-theme .filter-bar .segmented-control__segment { background-color:var(--tm-ctrl) !important; color:var(--tm-ctrl-text) !important; border-color:var(--tm-grid) !important; }
+html.tm-sq-on.tm-theme .filter-bar .button--primary { background-color:var(--tm-publish) !important; color:var(--tm-publish-text) !important; }
+html.tm-sq-on.tm-theme .filter-bar svg { color:var(--tm-ctrl-text) !important; }
+html.tm-sq-on.tm-theme .filter-bar .button--primary svg { color:var(--tm-publish-text) !important; }
+
+/* Warning icons (alert triangles on shifts) */
+html.tm-sq-on.tm-theme .svg-icon--alert-triangle { color:var(--tm-warn) !important; fill:var(--tm-warn) !important; }
+html.tm-sq-on.tm-theme .svg-icon--alert-triangle path { fill:var(--tm-warn) !important; }
 html.tm-sq-on.tm-theme .filter-bar svg .svg-icon__stroke { stroke:currentColor !important; }
 html.tm-sq-on.tm-theme .filter-bar svg .svg-icon__fill { fill:currentColor !important; }
 
+/* Sidebar gutter: Square paints the spacer behind the nav light (#fafafa) */
+html.tm-sq-on.tm-theme .ecosystem-header-fixed-left-nav-spacer { background:var(--tm-bg) !important; }
+
 /* Pop-ups, dialogs and date picker: Square-styled, darkened by inversion on dark themes */
-html.tm-sq-on.tm-theme.tm-dark .popover,
-html.tm-sq-on.tm-theme.tm-dark .dialog--modal { filter:invert(.92) hue-rotate(180deg); }
-html.tm-sq-on.tm-theme.tm-dark .popover img,
-html.tm-sq-on.tm-theme.tm-dark .dialog--modal img { filter:invert(1) hue-rotate(180deg); }
+/* (add/edit shift sheet included; outermost pop-up only, since nested inversions cancel out) */
+html.tm-sq-on.tm-theme.tm-dark :is(${POPUPS}):not(:is(${POPUPS}) *) { filter:invert(.92) hue-rotate(180deg); }
+html.tm-sq-on.tm-theme.tm-dark :is(${POPUPS}) :is(img, video) { filter:invert(1) hue-rotate(180deg); }
 `;
 
   // Optional: one color for every shift block instead of Square's job colors
@@ -231,7 +248,7 @@ html.tm-sq-on.tm-theme.tm-myshift:not(.tm-shape-outline):not(.tm-shape-mix) .sch
 html.tm-sq-on.tm-theme.tm-myshift:not(.tm-shape-outline):not(.tm-shape-mix) .timeline-schedule-cell-button__time-entry { background-color:var(--tm-shift) !important; }
 html.tm-sq-on.tm-theme.tm-myshift:not(.tm-shape-outline):not(.tm-shape-mix) .timeline-schedule-cell-button__shift__label { color:var(--tm-shift-text) !important; }
 html.tm-sq-on.tm-theme.tm-myshift:not(.tm-shape-outline):not(.tm-shape-mix) .schedule-cell-button--existing:not(.schedule-cell-button--published),
-html.tm-sq-on.tm-theme.tm-myshift:not(.tm-shape-outline):not(.tm-shape-mix) .timeline-schedule-cell-button--existing:not(.timeline-schedule-cell-button--published) .timeline-schedule-cell-button__time-entry { opacity:.65; outline:2px dashed var(--tm-shift-text); outline-offset:-3px; }
+html.tm-sq-on.tm-theme.tm-myshift:not(.tm-shape-outline):not(.tm-shape-mix) .timeline-schedule-cell-button--existing:not(.timeline-schedule-cell-button--published) .timeline-schedule-cell-button__time-entry { opacity:.65; outline:2px dashed var(--tm-unpub); outline-offset:-3px; }
 
 /* Shift style: Outline / Mix. --tm-c is each block's own color (captured from Square, or your custom shift color). */
 html.tm-sq-on.tm-myshift [data-tm-c] { --tm-c:var(--tm-shift) !important; }
@@ -244,9 +261,9 @@ html.tm-sq-on.tm-shape-mix .schedule-cell-button--existing[data-tm-c],
 html.tm-sq-on.tm-shape-outline .timeline-schedule-cell-button__shift__label,
 html.tm-sq-on.tm-shape-mix .timeline-schedule-cell-button__shift__label { color:var(--tm-text, #1a1a1a) !important; }
 html.tm-sq-on.tm-shape-outline .schedule-cell-button--existing[data-tm-c] > .schedule-cell-button__title,
-html.tm-sq-on.tm-shape-outline .timeline-schedule-cell-button__shift__label [data-test-shift-info-first-row] { color:var(--tm-c) !important; opacity:1; filter:brightness(1.25); }
+html.tm-sq-on.tm-shape-outline .timeline-schedule-cell-button__shift__label [data-test-shift-info-first-row] { color:color-mix(in srgb, var(--tm-c) 45%, var(--tm-text, #1a1a1a)) !important; opacity:1; }
 html.tm-sq-on.tm-shape-outline .schedule-cell-button--existing[data-tm-c]:not(.schedule-cell-button--published),
-html.tm-sq-on.tm-shape-mix .schedule-cell-button--existing[data-tm-c]:not(.schedule-cell-button--published) { box-shadow:none !important; outline:2px dashed var(--tm-c) !important; outline-offset:-2px; opacity:1 !important; }
+html.tm-sq-on.tm-shape-mix .schedule-cell-button--existing[data-tm-c]:not(.schedule-cell-button--published) { box-shadow:none !important; outline:2px dashed var(--tm-unpub, var(--tm-c)) !important; outline-offset:-2px; opacity:1 !important; }
 html.tm-sq-on.tm-shape-outline .schedule-cell-button--existing.schedule-cell-button--in-past,
 html.tm-sq-on.tm-shape-mix .schedule-cell-button--existing.schedule-cell-button--in-past { opacity:1 !important; filter:saturate(.35) !important; }
 
@@ -287,28 +304,60 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     const c = themeColors();
     html.classList.toggle('tm-theme', !!c);
     html.classList.toggle('tm-myshift', !!c && !S.squareShift);
-    if (!c) { html.classList.remove('tm-dark'); return; }
+    if (!c) { html.classList.remove('tm-dark'); ['--tm-unpub', '--tm-today'].forEach(k => html.style.removeProperty(k)); return; }
     html.classList.toggle('tm-dark', luminance(c.bg) < 0.4);
     const vars = {
       '--tm-bg': c.bg, '--tm-surface': c.surface, '--tm-text': c.text, '--tm-grid': c.grid,
       '--tm-accent': c.accent, '--tm-accent-text': readableOn(c.accent),
       '--tm-shift': c.shift, '--tm-shift-text': readableOn(c.shift),
+      '--tm-publish': c.publish, '--tm-publish-text': readableOn(c.publish),
+      '--tm-ctrl': c.controls, '--tm-ctrl-text': c.controls === c.surface ? c.text : readableOn(c.controls),
+      '--tm-today': c.today, '--tm-warn': c.warn, '--tm-unpub': c.unpub,
       '--tm-muted': `color-mix(in srgb, ${c.text} 65%, ${c.bg})`,
     };
     for (const k in vars) if (html.style.getPropertyValue(k) !== vars[k]) html.style.setProperty(k, vars[k]);
   }
 
   // ---- Sidebar (lives in an open shadow root on #messenger-host) ----------
+  // The page MutationObserver can't see inside this shadow root, and the header renders
+  // (and may re-render, dropping foreign nodes) after we run. So watch the root itself and
+  // retry until it exists.
+  let navRoot = null, navFrame = 0, navRetry = 0;
+  const navObs = new MutationObserver(() => {
+    if (!navFrame) navFrame = requestAnimationFrame(() => { navFrame = 0; applyNav(); });
+  });
+  const NAV_INV = 'filter:invert(.92) hue-rotate(180deg) !important;';
   function applyNav() {
     const host = document.getElementById('messenger-host');
     const root = host && host.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      if (navRetry++ < 40) setTimeout(applyNav, 250);
+      return;
+    }
+    if (root !== navRoot) { navObs.disconnect(); navObs.observe(root, { childList: true, subtree: true }); navRoot = root; }
+    const dark = onPage() && document.documentElement.classList.contains('tm-dark');
+    // Invert the nav's boxes: a display:contents wrapper ignores filter, so use its children.
+    const want = new Set();
+    const nav = root.querySelector('.fixed-left-nav');
+    if (dark && S.nav && nav) {
+      const walk = (el, d) => {
+        if (d < 4 && getComputedStyle(el).display === 'contents') [...el.children].forEach(c => walk(c, d + 1));
+        else want.add(el);
+      };
+      walk(nav, 0);
+    }
+    root.querySelectorAll('[data-tm-inv]').forEach(el => { if (!want.has(el)) el.removeAttribute('data-tm-inv'); });
+    want.forEach(el => { if (!el.hasAttribute('data-tm-inv')) el.setAttribute('data-tm-inv', ''); });
     let s = root.getElementById('tm-sq-nav');
     if (!s) { s = document.createElement('style'); s.id = 'tm-sq-nav'; root.appendChild(s); }
-    let css = '';
-    if (onPage() && !S.nav) css = '.fixed-left-nav{display:none !important;}';
-    else if (onPage() && document.documentElement.classList.contains('tm-dark'))
-      css = '.fixed-left-nav{filter:invert(.92) hue-rotate(180deg);} .fixed-left-nav img{filter:invert(1) hue-rotate(180deg);}';
+    let css = onPage() && !S.nav ? '.fixed-left-nav{display:none !important;}\n' : '';
+    if (dark)
+      // Transparent nav background would invert to nothing and show the light page behind: give it white
+      // (inverts to near-black). Flyouts/pop-ups rendered in this root get the same treatment, outermost only.
+      css += `[data-tm-inv]{${NAV_INV} background-color:#fff;}
+[data-tm-inv] img, [data-tm-inv] video{filter:invert(1) hue-rotate(180deg) !important;}
+:is(${POPUPS}):not([data-tm-inv] *):not(:is(${POPUPS}) *){${NAV_INV}}
+:is(${POPUPS}):not([data-tm-inv] *) :is(img, video){filter:invert(1) hue-rotate(180deg) !important;}`;
     setText(s, css);
   }
 
@@ -324,11 +373,50 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     if (!table) return '';
     const cols = headerDays(table);
     if (cols.length !== 7) return '';
-    return cols.filter(c => S.hidden.includes(c.day)).map(c =>
+    // Today's column (Square doesn't mark it in Week view); themed only, compared as numbers so 11/05 = 11/5
+    const now = new Date(), md = d => d.split('/').map(Number).join('/');
+    const today = cols.find(c => md(c.date) === (now.getMonth() + 1) + '/' + now.getDate());
+    const todayCss = today ?
+      `html.tm-sq-on.tm-theme .schedule-table thead tr > :nth-child(${today.idx}){background-color:color-mix(in srgb, var(--tm-today) 28%, var(--tm-surface)) !important;box-shadow:inset 0 -3px 0 var(--tm-today) !important;}` +
+      `html.tm-sq-on.tm-theme .schedule-table tbody td[data-test-weekday-column="${today.date}"]{background-color:color-mix(in srgb, var(--tm-today) 9%, transparent) !important;}
+` : '';
+    return todayCss + cols.filter(c => S.hidden.includes(c.day)).map(c =>
       `html.tm-sq-on .schedule-table thead tr > :nth-child(${c.idx}),` +
       `html.tm-sq-on .schedule-table tfoot tr > :nth-child(${c.idx}),` +
       `html.tm-sq-on .schedule-table tbody td[data-test-weekday-column="${c.date}"]{display:none !important;}`
     ).join('\n');
+  }
+
+  // ---- Even grid lines -------------------------------------------------------
+  // At fractional display scaling (125%, 150%) a 1px line is antialiased across two device pixels,
+  // and how it splits depends on where the line lands, so lines with fractional positions shade
+  // unevenly. Make every Week day column (and row) a whole number of device pixels so all lines
+  // share the same phase. The name column absorbs the remainder.
+  // Step = smallest whole CSS px that is also whole device px (1 at 100%, 4 at 125%, 2 at 150%).
+  const devSnap = px => {
+    // Smallest step (CSS px) that is also a whole number of device px. Chromebook scales
+    // (1.6, 1.777…) and browser zoom (110% → x1.1) need steps up to 10+; else take the closest.
+    const r = devicePixelRatio, err = u => Math.abs(u * r - Math.round(u * r));
+    let u = 1, best = 1;
+    for (; u <= 20; u++) { if (err(u) < err(best)) best = u; if (err(u) < 2e-3) break; }
+    u = u <= 20 ? u : best;
+    return Math.floor(px / u) * u;
+  };
+  function snapCols(table) {
+    const html = document.documentElement, t = table && table.querySelector('table');
+    const head = t && t.tHead && t.tHead.rows[0];
+    if (!head) return;
+    const days = [...head.cells].slice(1).filter(c => getComputedStyle(c).display !== 'none').length;
+    if (!days) return;
+    const W = t.parentElement.getBoundingClientRect().width;
+    const name = 230, d = devSnap((W - name) / days);
+    const set = (k, v) => { if (html.style.getPropertyValue(k) !== v) html.style.setProperty(k, v); };
+    set('--tm-daycol', d + 'px');
+    // Name column snapped too, so its divider shades like the rest; the table is sized to the exact
+    // total (a sub-step strip may be left at the right) or table-layout would spread the remainder.
+    const n = devSnap(W - d * days);
+    set('--tm-namecol', n + 'px');
+    set('--tm-tablew', (n + d * days) + 'px');
   }
 
   // ---- Fit all Week rows into the viewport ----------------------------------
@@ -343,7 +431,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     const head = (table.querySelector('thead')?.getBoundingClientRect().height) || 34;
     const foot = (table.querySelector('tfoot')?.getBoundingClientRect().height) || 40;
     const avail = window.innerHeight - top - head - foot - barH - 4;
-    const h = Math.max(MIN_ROW, Math.min(MAX_ROW, Math.floor(avail / rows)));
+    const h = devSnap(Math.max(MIN_ROW, Math.min(MAX_ROW, Math.floor(avail / rows))));
     const hv = h + 'px';
     if (html.style.getPropertyValue('--tm-row') !== hv) html.style.setProperty('--tm-row', hv);
     html.classList.toggle('tm-one', h < 40);
@@ -361,6 +449,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     return p;
   }
 
+  let pickFrame = 0;
   function refreshPanel() {
     const p = buildPanel();
     const sig = S.theme + '|' + JSON.stringify(S.custom) + '|' + S.squareShift + '|' + S.shape;
@@ -376,7 +465,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
       b.type = 'button'; b.textContent = PRESET_NAMES[k]; b.className = S.theme === k ? 'on' : '';
       b.addEventListener('click', e => {
         e.preventDefault();
-        if (k === 'custom' && S.theme !== 'custom' && PRESETS[S.theme]) S.custom = Object.assign({}, PRESETS[S.theme]); // start Custom from the current preset
+        if (k === 'custom' && S.theme !== 'custom' && PRESETS[S.theme]) S.custom = fullColors(PRESETS[S.theme]); // start Custom from the current preset
         S.theme = k; save(); applyTheme(); applyNav(); refreshPanel(); buildBarSafe();
       });
       row.appendChild(b);
@@ -404,25 +493,30 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
         S.shape = 'mix';
         srow.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.textContent === SHAPES.mix));
       }
-      save(); applyTheme(); captureColors();
+      if (!pickFrame) pickFrame = requestAnimationFrame(() => { pickFrame = 0; applyTheme(); captureColors(); });
     });
-    fr.addEventListener('change', () => refreshPanel());
+    fr.addEventListener('change', () => { save(); applyTheme(); captureColors(); refreshPanel(); });
     fl.appendChild(ft); fl.appendChild(fr);
     p.appendChild(fl);
 
     head('Colors');
-    const cur = themeColors() || S.custom;
+    const cur = themeColors() || fullColors(S.custom);
     COLOR_FIELDS.forEach(([key, label]) => {
       const l = document.createElement('label');
       l.textContent = label;
       const inp = document.createElement('input');
       inp.type = 'color'; inp.value = cur[key];
+      // Dragging in the picker fires input many times per frame and each restyles the whole page,
+      // so apply at most once per frame and save only when the picker is released.
       inp.addEventListener('input', () => {
-        if (S.theme !== 'custom') { S.custom = Object.assign({}, themeColors() || S.custom); S.theme = 'custom'; }
-        S.custom[key] = inp.value; save(); applyTheme(); applyNav();
-        p.querySelectorAll('.tm-presets button').forEach(b => b.classList.toggle('on', b.textContent === PRESET_NAMES.custom));
+        if (S.theme !== 'custom') {
+          S.custom = Object.assign({}, themeColors() || fullColors(S.custom)); S.theme = 'custom';
+          p.querySelectorAll('.tm-presets button').forEach(b => b.classList.toggle('on', b.textContent === PRESET_NAMES.custom));
+        }
+        S.custom[key] = inp.value;
+        if (!pickFrame) pickFrame = requestAnimationFrame(() => { pickFrame = 0; applyTheme(); applyNav(); });
       });
-      inp.addEventListener('change', () => { refreshPanel(); buildBarSafe(); });
+      inp.addEventListener('change', () => { S.custom[key] = inp.value; save(); applyTheme(); applyNav(); refreshPanel(); buildBarSafe(); });
       l.appendChild(inp);
       p.appendChild(l);
     });
@@ -544,6 +638,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
       lastTable = table;
       captureColors();
       buildBar(table);
+      snapCols(table);
       fit(table);
       watchLayout();
     } finally { busy = false; }
@@ -554,7 +649,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
   let watched = null;
   const ro = new ResizeObserver(() => {
     const t = document.querySelector('.schedule-table');
-    if (t && document.documentElement.classList.contains('tm-sq-on')) fit(t);
+    if (t && document.documentElement.classList.contains('tm-sq-on')) { snapCols(t); fit(t); }
   });
   function watchLayout() {
     const fb = document.querySelector('.filter-bar');

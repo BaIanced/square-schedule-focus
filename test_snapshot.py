@@ -37,14 +37,22 @@ CHECKS = r"""
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('view'); ap.add_argument('settings', nargs='?', default='{}')
-    ap.add_argument('--shot'); ap.add_argument('--js'); ap.add_argument('--w', type=int, default=1600); ap.add_argument('--h', type=int, default=900)
+    ap.add_argument('--shot'); ap.add_argument('--js'); ap.add_argument('--w', type=int, default=1600); ap.add_argument('--h', type=int, default=900); ap.add_argument('--dpr', type=float, default=1)
     a = ap.parse_args()
     html = pathlib.Path(SNAPS[a.view]).read_text(encoding='utf-8', errors='replace')
     src = SCRIPT.read_text()
     errors = []
     with sync_playwright() as p:
-        b = p.chromium.launch(channel='chrome')  # uses installed Chrome; or p.chromium.launch() after `playwright install chromium`
-        pg = b.new_page(viewport={'width': a.w, 'height': a.h})
+        # installed Chrome, else Brave, else Edge, else Playwright's own Chromium (`playwright install chromium`)
+        brave = pathlib.Path(os.environ.get('SQ_BRAVE', r'C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'))
+        tries = [{'channel': 'chrome'}] + ([{'executable_path': str(brave)}] if brave.exists() else []) + [{'channel': 'msedge'}, {}]
+        for i, kw in enumerate(tries):
+            try:
+                b = p.chromium.launch(**kw)
+                break
+            except Exception:
+                if i == len(tries) - 1: raise
+        pg = b.new_page(viewport={'width': a.w, 'height': a.h}, device_scale_factor=a.dpr)
         pg.on('pageerror', lambda e: errors.append(str(e)))
         pg.route('**/*', lambda r: r.fulfill(status=200, content_type='text/html', body=html) if r.request.url == URL else r.abort())
         pg.goto(URL, wait_until='domcontentloaded')
