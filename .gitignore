@@ -1,0 +1,6 @@
+# Never commit Square page snapshots or screenshots: they contain staff names and hours.
+*snapshot*.html
+snapshots/
+private/
+*.png
+__pycache__/
