@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Square Schedule – Focus View
 // @namespace    vince.square.schedule
-// @version      2.3.0
-// @description  Week + Day view: hide days, collapse sidebar, fit staff on screen, hide labor $, readability, color themes with custom picker, time-first shift labels, quiet "+" slots, time-entry fix.
+// @version      2.4.0
+// @description  Week + Day view: hide days, collapse sidebar, fit staff on screen, hide labor $, readability, color themes with custom picker, time-first shift labels, quiet "+" slots, unpublished-shift highlight, time-entry fix.
 // @match        https://app.squareup.com/dashboard/*
 // @run-at       document-idle
 // @grant        none
@@ -33,10 +33,10 @@
   };
   const PRESET_NAMES = { off: 'Square', dark: 'Dark', dim: 'Dim', midnight: 'Midnight', warm: 'Warm', contrast: 'Contrast', custom: 'Custom' };
   const COLOR_FIELDS = [['bg', 'Background'], ['surface', 'Headers / cells'], ['text', 'Text'], ['grid', 'Grid lines'], ['accent', 'Accent'], ['shift', 'Shift blocks'],
-    ['publish', 'Publish button'], ['controls', 'Filter-bar controls'], ['today', 'Today highlight'], ['warn', 'Warning icons'], ['unpub', 'Unpublished outline']];
+    ['publish', 'Publish button'], ['controls', 'Filter-bar controls'], ['today', 'Today highlight'], ['warn', 'Warning icons'], ['unpub', 'Unpublished highlight']];
 
   const SHAPES = { fill: 'Fill', outline: 'Outline', mix: 'Mix' };
-  const DEFAULTS = { hidden: [], nav: false, fit: true, read: true, theme: 'dark', custom: Object.assign({}, PRESETS.dark), squareShift: true, shape: 'fill', fillPct: 30, site: true };
+  const DEFAULTS = { hidden: [], nav: false, fit: true, read: true, theme: 'dark', custom: Object.assign({}, PRESETS.dark), squareShift: true, shape: 'fill', fillPct: 30, site: true, unpubHL: true };
   const load = () => {
     try {
       const s = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}'));
@@ -59,7 +59,7 @@
   }
   const readableOn = hex => (luminance(hex) > 0.4 ? '#111111' : '#ffffff');
   // Fields added in v2.2 fall back to existing ones, so presets and older saved Custom themes need no migration
-  const fullColors = c => c && Object.assign({ publish: c.accent, controls: c.surface, today: c.accent, warn: '#f5b942', unpub: c.text }, c);
+  const fullColors = c => c && Object.assign({ publish: c.accent, controls: c.surface, today: c.accent, warn: '#f5b942', unpub: '#f59e0b' }, c);
   const themeColors = () => fullColors((S.theme === 'custom' ? S.custom : PRESETS[S.theme]) || null);
 
   // ---- Readable font (Square's CSP allows fonts.googleapis.com) -----------
@@ -271,6 +271,13 @@ html.tm-sq-on.tm-shape-mix .schedule-cell-button--existing[data-tm-c]:not(.sched
 html.tm-sq-on.tm-shape-outline .schedule-cell-button--existing.schedule-cell-button--in-past,
 html.tm-sq-on.tm-shape-mix .schedule-cell-button--existing.schedule-cell-button--in-past { opacity:1 !important; filter:saturate(.35) !important; }
 
+/* Unpublished highlight (any theme, any shift style): solid border + tint over the shift's own color.
+   :not(#tm-none) only raises specificity so this wins over the dashed-outline rules above. */
+html.tm-sq-on.tm-unpub-hl :is(.schedule-cell-button--staged, .schedule-cell-button--existing:not(.schedule-cell-button--published)):not(#tm-none),
+html.tm-sq-on.tm-unpub-hl .timeline-schedule-cell-button--existing:not(.timeline-schedule-cell-button--published) .timeline-schedule-cell-button__time-entry:not(#tm-none) {
+  outline:2px solid var(--tm-unpub, #f59e0b) !important; outline-offset:-2px; opacity:1 !important;
+  background-image:linear-gradient(color-mix(in srgb, var(--tm-unpub, #f59e0b) 22%, transparent), color-mix(in srgb, var(--tm-unpub, #f59e0b) 22%, transparent)) !important; }
+
 /* Dark scrollbars on the schedule */
 html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout__content * { scrollbar-color:var(--tm-grid) var(--tm-bg); }
 `;
@@ -303,6 +310,7 @@ html.tm-sq-on.tm-theme .app-layout__content, html.tm-sq-on.tm-theme .app-layout_
     const html = document.documentElement;
     html.classList.toggle('tm-shape-outline', S.shape === 'outline');
     html.classList.toggle('tm-shape-mix', S.shape === 'mix');
+    html.classList.toggle('tm-unpub-hl', !!S.unpubHL);
     const fp = Math.max(0, Math.min(100, +S.fillPct || 0)) + '%';
     if (html.style.getPropertyValue('--tm-fillpct') !== fp) html.style.setProperty('--tm-fillpct', fp);
     const c = themeColors();
@@ -469,7 +477,7 @@ html.tm-site :is(img, video, canvas, picture, [style*="background-image"]) :is(i
   let pickFrame = 0;
   function refreshPanel() {
     const p = buildPanel();
-    const sig = S.theme + '|' + JSON.stringify(S.custom) + '|' + S.squareShift + '|' + S.shape + '|' + S.site;
+    const sig = S.theme + '|' + JSON.stringify(S.custom) + '|' + S.squareShift + '|' + S.shape + '|' + S.site + '|' + S.unpubHL;
     if (p.dataset.sig === sig) return;
     p.dataset.sig = sig;
     p.textContent = '';
@@ -545,6 +553,14 @@ html.tm-site :is(img, video, canvas, picture, [style*="background-image"]) :is(i
     cb.addEventListener('change', () => { S.squareShift = cb.checked; save(); applyTheme(); refreshPanel(); });
     cl.appendChild(cb);
     p.appendChild(cl);
+
+    const ul = document.createElement('label');
+    ul.textContent = 'Highlight unpublished shifts';
+    const ub = document.createElement('input');
+    ub.type = 'checkbox'; ub.checked = S.unpubHL;
+    ub.addEventListener('change', () => { S.unpubHL = ub.checked; save(); applyTheme(); refreshPanel(); });
+    ul.appendChild(ub);
+    p.appendChild(ul);
 
     const sl = document.createElement('label');
     sl.textContent = 'Dark theme on all other Dashboard pages';

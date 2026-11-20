@@ -16,6 +16,7 @@ A button bar at the bottom right of the schedule:
 - **Colors**: themes (Square, Dark, Dim, Midnight, Warm, Contrast, Custom), color pickers (page, cells, text, lines, accent, shifts, Publish button, filter controls, today highlight, warning icons, unpublished outline), shift style (Fill, Outline or Mix with a fill-opacity slider), and an option to use one color for all shifts instead of Square's job colors.
 
 It also:
+- highlights **unpublished shifts** with a solid border and tint (amber by default; the color is "Unpublished highlight" in Custom, and a checkbox turns it off);
 - shows shift **times first and bold**, with the job name smaller after them;
 - hides labor cost (set `SHOW_COST = true` at the top of the script to show it);
 - on dark themes, darkens Square's sidebar, pop-ups and the add/edit shift sheet, and highlights today's column in Week view;
@@ -24,9 +25,6 @@ It also:
 - fixes Square's shift editor time box, where typing a time like 5:30 can drop digits.
 
 Settings are saved in your browser (localStorage), per computer.
-
-## Extra: Unpublished Shift Style
-A small separate script, [square-unpublished-shifts.user.js](https://raw.githubusercontent.com/BaIanced/square-schedule-focus/main/square-unpublished-shifts.user.js), gives unpublished (staged) shifts an amber border and tint so they stand out. Open the link to install it in Tampermonkey. Change `COLOR` and `TEXT` at the top to pick other colors. It changes only how the page looks.
 
 ## Testing without touching Square
 `test_snapshot.py` loads a saved copy of the schedule page in headless Chrome, runs the script with given settings, and prints what changed. It needs Python, `pip install playwright`, and Chrome. Snapshots contain real staff data, so they live **outside** this repo (default `../private/square-snapshots`, or set `SQ_SNAPSHOT_DIR`).
