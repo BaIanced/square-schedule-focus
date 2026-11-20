@@ -25,6 +25,9 @@ It also:
 
 Settings are saved in your browser (localStorage), per computer.
 
+## Extra: Unpublished Shift Style
+A small separate script, [square-unpublished-shifts.user.js](https://raw.githubusercontent.com/BaIanced/square-schedule-focus/main/square-unpublished-shifts.user.js), gives unpublished (staged) shifts an amber border and tint so they stand out. Open the link to install it in Tampermonkey. Change `COLOR` and `TEXT` at the top to pick other colors. It changes only how the page looks.
+
 ## Testing without touching Square
 `test_snapshot.py` loads a saved copy of the schedule page in headless Chrome, runs the script with given settings, and prints what changed. It needs Python, `pip install playwright`, and Chrome. Snapshots contain real staff data, so they live **outside** this repo (default `../private/square-snapshots`, or set `SQ_SNAPSHOT_DIR`).
 
